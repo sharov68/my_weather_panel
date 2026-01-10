@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
@@ -96,16 +96,13 @@ class _WeatherDashboardState extends State<WeatherDashboard> {
     });
 
     try {
-      final client = HttpClient();
       final uri = Uri.parse(
         'https://api.open-meteo.com/v1/forecast?latitude=54.629&longitude=39.742&current_weather=true',
       );
-      final request = await client.getUrl(uri);
-      final response = await request.close();
+      final response = await http.get(uri);
 
       if (response.statusCode == 200) {
-        final jsonString = await response.transform(utf8.decoder).join();
-        final jsonData = json.decode(jsonString) as Map<String, dynamic>;
+        final jsonData = json.decode(response.body) as Map<String, dynamic>;
         final weatherData = WeatherData.fromJson(jsonData);
 
         setState(() {
@@ -113,11 +110,11 @@ class _WeatherDashboardState extends State<WeatherDashboard> {
           _isLoadingWeather = false;
         });
       } else {
-        throw Exception('Failed to load weather data');
+        throw Exception('Failed to load weather data: ${response.statusCode}');
       }
     } catch (e) {
       setState(() {
-        _weatherError = 'Failed to load weather';
+        _weatherError = 'Failed to load weather: $e';
         _isLoadingWeather = false;
       });
     }
