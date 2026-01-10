@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -7,116 +10,218 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'Weather Dashboard',
+      theme: ThemeData.dark(),
+      home: const WeatherDashboard(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class WeatherData {
+  final double temperature;
+  final double windSpeed;
+  final int weatherCode;
+  final bool isDay;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  const WeatherData({
+    required this.temperature,
+    required this.windSpeed,
+    required this.weatherCode,
+    required this.isDay,
+  });
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  factory WeatherData.fromJson(Map<String, dynamic> json) {
+    final current = json['current_weather'] as Map<String, dynamic>;
+    return WeatherData(
+      temperature: (current['temperature'] as num).toDouble(),
+      windSpeed: (current['windspeed'] as num).toDouble(),
+      weatherCode: current['weathercode'] as int,
+      isDay: current['is_day'] == 1,
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class WeatherDashboard extends StatefulWidget {
+  const WeatherDashboard({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  State<WeatherDashboard> createState() => _WeatherDashboardState();
+}
+
+class _WeatherDashboardState extends State<WeatherDashboard> {
+  DateTime _currentTime = DateTime.now();
+  WeatherData? _weatherData;
+  String? _weatherError;
+  bool _isLoadingWeather = true;
+
+  Timer? _clockTimer;
+  Timer? _weatherTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startClock();
+    _fetchWeather();
+    _startWeatherTimer();
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _weatherTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startClock() {
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {
+        _currentTime = DateTime.now();
+      });
     });
+  }
+
+  void _startWeatherTimer() {
+    _weatherTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _fetchWeather();
+    });
+  }
+
+  Future<void> _fetchWeather() async {
+    setState(() {
+      _isLoadingWeather = true;
+      _weatherError = null;
+    });
+
+    try {
+      final client = HttpClient();
+      final uri = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast?latitude=54.629&longitude=39.742&current_weather=true',
+      );
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+
+      if (response.statusCode == 200) {
+        final jsonString = await response.transform(utf8.decoder).join();
+        final jsonData = json.decode(jsonString) as Map<String, dynamic>;
+        final weatherData = WeatherData.fromJson(jsonData);
+
+        setState(() {
+          _weatherData = weatherData;
+          _isLoadingWeather = false;
+        });
+      } else {
+        throw Exception('Failed to load weather data');
+      }
+    } catch (e) {
+      setState(() {
+        _weatherError = 'Failed to load weather';
+        _isLoadingWeather = false;
+      });
+    }
+  }
+
+  String _formatTime() {
+    return '${_currentTime.hour.toString().padLeft(2, '0')}:${_currentTime.minute.toString().padLeft(2, '0')}:${_currentTime.second.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDate() {
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${_currentTime.day} ${months[_currentTime.month - 1]}';
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _formatDate(),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatTime(),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_isLoadingWeather)
+                        const Text(
+                          'Loading weather...',
+                          style: TextStyle(color: Colors.grey, fontSize: 24),
+                        )
+                      else if (_weatherError != null)
+                        Text(
+                          _weatherError!,
+                          style: const TextStyle(color: Colors.grey, fontSize: 24),
+                        )
+                      else if (_weatherData != null)
+                        Column(
+                          children: [
+                            Text(
+                              '${_weatherData!.temperature.round()}°C',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 48,
+                                fontWeight: FontWeight.w300,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Wind: ${_weatherData!.windSpeed.toStringAsFixed(1)} km/h · Code: ${_weatherData!.weatherCode} · ${_weatherData!.isDay ? 'Day' : 'Night'}',
+                              style: const TextStyle(
+                                color: Color(0xFF888888),
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 5,
+            left: 5,
+            child: IconButton(
+              onPressed: _fetchWeather,
+              icon: const Icon(Icons.refresh),
+              color: Colors.grey,
+              iconSize: 28,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
