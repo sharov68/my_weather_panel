@@ -160,7 +160,7 @@ class _WeatherDashboardState extends State<WeatherDashboard> {
                         _formatTime(),
                         style: const TextStyle(
                           color: Colors.grey,
-                          fontSize: 48,
+                          fontSize: 70,
                           fontWeight: FontWeight.w300,
                         ),
                       ),
